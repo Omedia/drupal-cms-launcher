@@ -1,0 +1,13 @@
+--- a/web/modules/contrib/drupal_cms_helper/src/EventSubscriber/RecipeSubscriber.php
++++ b/web/modules/contrib/drupal_cms_helper/src/EventSubscriber/RecipeSubscriber.php
+@@ -35,7 +35,9 @@
+ 
+   public function onApply(RecipeAppliedEvent $event): void {
+     // @todo Remove when https://www.drupal.org/i/1503146 is released.
+-    $config = $this->configFactory->getEditable('system.site');
++    // Recipe installation can rebuild the container. The persisted event
++    // subscriber must use the current factory after installing a theme.
++    $config = \Drupal::configFactory()->getEditable('system.site');
+ 
+     $front_saved_path = $config->get('page.front');
+     $front_system_path = $this->aliasManager->getPathByAlias($front_saved_path);

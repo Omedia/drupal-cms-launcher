@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Source artwork for the application icon. Render with scripts/build_icon.py.
+     The 824x824 rounded square inside a 1024x1024 canvas is Apple's macOS icon
+     grid, so the result sits correctly next to other icons in the Dock. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3BA9EC"/>
+      <stop offset="0.55" stop-color="#1478C4"/>
+      <stop offset="1" stop-color="#0A4E86"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DCEEFB"/>
+    </linearGradient>
+    <filter id="cast" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#062F53" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+
+  <g>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
+
+    <!-- Droplet: apex at the top, circular base. The play mark inside it reads
+         as "launch"; build_icon.py drops that element at 16 and 32 pixels,
+         where it degrades into a smudge. -->
+    <g filter="url(#cast)">
+      <path fill="url(#drop)" d="M512 286
+        C 512 286, 700 520, 700 604
+        A 188 188 0 1 1 324 604
+        C 324 520, 512 286, 512 286 Z"/>
+      <path id="launch-mark" fill="#1478C4" fill-opacity="0.92" d="M474 528 L614 604 L474 680 Z"/>
+    </g>
+
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="none"
+          stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="2"/>
+  </g>
+</svg>
