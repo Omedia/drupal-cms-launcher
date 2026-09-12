@@ -1,0 +1,118 @@
+--- a/web/core/lib/Drupal/Core/Extension/ExtensionDiscovery.php	2026-09-11 17:33:49
++++ b/web/core/lib/Drupal/Core/Extension/ExtensionDiscovery.php	2026-09-11 17:34:35
+@@ -220,7 +220,7 @@
+     foreach ($search_dirs as $dir) {
+       // Discover all extensions in the directory, unless we did already.
+       if (!isset(static::$files[$this->root][$dir][$include_tests])) {
+-        static::$files[$this->root][$dir][$include_tests] = $this->scanDirectory($dir, $include_tests);
++        static::$files[$this->root][$dir][$include_tests] = $this->scanDirectoryCached($dir, $include_tests);
+       }
+       // Only return extensions of the requested type.
+       if (isset(static::$files[$this->root][$dir][$include_tests][$type])) {
+@@ -399,7 +399,45 @@
+     // earlier ones; they replace the extension in the existing $files array.
+     foreach ($all_files as $file) {
+       $files[$file->getName()] = $file;
++    }
++    return $files;
++  }
++
++  /**
++   * Reuses a directory scan across requests while its directories are unchanged.
++   *
++   * Installing a module rebuilds the container and rescans every extension
++   * directory although the file system did not change. The scan result is
++   * kept in APCu, keyed by the modification times of the search directory and
++   * of the directories up to two levels below it, which change whenever an
++   * extension directory is added, removed or renamed there.
++   */
++  protected function scanDirectoryCached($dir, $include_tests) {
++    if (!function_exists('apcu_fetch')) {
++      return $this->scanDirectory($dir, $include_tests);
++    }
++    $absolute = $dir === '' ? $this->root : $this->root . '/' . $dir;
++    $signature = [$absolute => @filemtime($absolute)];
++    foreach (['profiles', 'modules', 'themes'] as $type_directory) {
++      $level1 = $absolute . '/' . $type_directory;
++      if (!is_dir($level1)) {
++        continue;
++      }
++      $signature[$level1] = filemtime($level1);
++      foreach (scandir($level1, SCANDIR_SORT_NONE) as $child) {
++        $level2 = $level1 . '/' . $child;
++        if ($child[0] !== '.' && is_dir($level2)) {
++          $signature[$level2] = filemtime($level2);
++        }
++      }
+     }
++    $key = 'extension_discovery:' . hash('sha256', serialize([$this->root, $dir, $include_tests, Settings::get('file_scan_ignore_directories', []), $signature]));
++    $cached = apcu_fetch($key, $success);
++    if ($success && is_array($cached)) {
++      return $cached;
++    }
++    $files = $this->scanDirectory($dir, $include_tests);
++    apcu_store($key, $files, 3600);
+     return $files;
+   }
+ 
+--- a/web/core/lib/Drupal/Component/FileCache/FileCache.php	2026-09-11 17:33:49
++++ b/web/core/lib/Drupal/Component/FileCache/FileCache.php	2026-09-11 17:34:35
+@@ -84,7 +84,7 @@
+         continue;
+       }
+ 
+-      $realpath = realpath($filepath);
++      $realpath = static::realpath($filepath);
+       // If the file exists but realpath returns nothing, it is using a stream
+       // wrapper, those are not supported.
+       if (empty($realpath)) {
+@@ -118,10 +118,25 @@
+   }
+ 
+   /**
++   * Resolves a path without asking the kernel for the working directory.
++   *
++   * PHP's realpath() fetches the current directory for every relative path,
++   * which is a comparatively expensive system call on macOS.
++   */
++  protected static function realpath(string $filepath): string|false {
++    static $cwd;
++    if ($filepath !== '' && $filepath[0] !== '/' && !str_contains($filepath, '://')) {
++      $cwd ??= getcwd();
++      $filepath = $cwd . '/' . $filepath;
++    }
++    return realpath($filepath);
++  }
++
++  /**
+    * {@inheritdoc}
+    */
+   public function set($filepath, $data) {
+-    $realpath = realpath($filepath);
++    $realpath = static::realpath($filepath);
+     $cached = [
+       'mtime' => filemtime($filepath),
+       'filepath' => $filepath,
+@@ -139,7 +154,7 @@
+    * {@inheritdoc}
+    */
+   public function delete($filepath) {
+-    $realpath = realpath($filepath);
++    $realpath = static::realpath($filepath);
+     $cid = $this->prefix . ':' . $this->collection . ':' . $realpath;
+ 
+     unset(static::$cached[$cid]);
+--- a/web/core/includes/batch.inc	2026-09-11 17:33:49
++++ b/web/core/includes/batch.inc	2026-09-11 17:34:35
+@@ -327,8 +327,9 @@
+     // processed or all sets have been completed.
+     $queue = _batch_queue($current_set);
+ 
+-    // If we are in progressive mode, break processing after 1 second.
+-    if ($batch['progressive'] && Timer::read('batch_processing') > 1000) {
++    // If we are in progressive mode, break processing after 5 seconds; every
++    // round trip bootstraps Drupal again.
++    if ($batch['progressive'] && Timer::read('batch_processing') > 5000) {
+       // Record elapsed wall clock time.
+       $current_set['elapsed'] = round((microtime(TRUE) - $current_set['start']) * 1000, 2);
+       break;
